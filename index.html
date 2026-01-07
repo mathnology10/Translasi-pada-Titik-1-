@@ -4,77 +4,135 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Translasi Titik</title>
-  <script src="/_sdk/data_sdk.js"></script>
-  <script src="/_sdk/element_sdk.js"></script>
+
+  <!-- SDK paths dibuat relatif. Jika SDK tidak ada di folder _sdk, fallback mock akan dipakai di script -->
+  <script src="./_sdk/data_sdk.js"></script>
+  <script src="./_sdk/element_sdk.js"></script>
+
   <script src="https://cdn.tailwindcss.com"></script>
+
   <style>
         body {
             box-sizing: border-box;
         }
-        
+
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
-        
+
         * {
             font-family: 'Poppins', sans-serif;
         }
-        
+
         .grid-bg {
-            background-image: 
-                linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
             background-size: 20px 20px;
         }
-        
+
         .step-card {
             transition: all 0.3s ease;
         }
-        
+
         .step-card.active {
             transform: scale(1.02);
-            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.12);
         }
-        
+
         .choice-btn {
             transition: all 0.2s ease;
         }
-        
+
         .choice-btn:hover {
             transform: translateY(-2px);
         }
-        
+
         .choice-btn.correct {
-            animation: correct-pulse 0.5s ease;
+            animation: correct-pulse 0.35s ease;
         }
-        
+
         .choice-btn.incorrect {
-            animation: shake 0.5s ease;
+            animation: shake 0.35s ease;
         }
-        
+
         @keyframes correct-pulse {
             0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+            50% { transform: scale(1.03); }
         }
-        
+
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
         }
-        
+
         .fade-in {
-            animation: fadeIn 0.5s ease;
+            animation: fadeIn 0.45s ease;
         }
-        
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
+            from { opacity: 0; transform: translateY(12px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* small helper for svg responsiveness */
+        .coord-svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
     </style>
   <style>@view-transition { navigation: auto; }</style>
  </head>
- <body class="h-full">
+ <body class="h-full bg-slate-900">
   <div id="app" class="w-full h-full overflow-auto"></div>
+
   <script>
+        // --- fallback mocks untuk SDK (dipakai jika file SDK tidak ditemukan) ---
+        (function ensureSDKFallbacks(){
+            // Jika dataSdk / elementSdk belum terdefinisi oleh skrip eksternal, sediakan mock sederhana
+            if (!window.dataSdk) {
+                (function(){
+                    let stored = [];
+                    let handler = null;
+                    window.dataSdk = {
+                        init: async (dataHandler) => {
+                            handler = dataHandler || null;
+                            // beri handler data kosong di awal
+                            if (handler && typeof handler.onDataChanged === 'function') {
+                                handler.onDataChanged(stored);
+                            }
+                            return { isOk: true };
+                        },
+                        create: async (item) => {
+                            stored.push(item);
+                            if (handler && typeof handler.onDataChanged === 'function') {
+                                handler.onDataChanged(stored);
+                            }
+                            return { isOk: true };
+                        },
+                        // tambahan util untuk debugging
+                        __getAll: () => stored
+                    };
+                    console.warn("[dataSdk] fallback mock aktif (development). Jika Anda memiliki _sdk/data_sdk.js, abaikan pesan ini.");
+                })();
+            }
+
+            if (!window.elementSdk) {
+                window.elementSdk = {
+                    init: (opts) => {
+                        // simpan config jika dipanggil setConfig
+                        window.elementSdk._config = opts && opts.defaultConfig ? { ...opts.defaultConfig } : {};
+                        window.elementSdk.setConfig = (cfg) => {
+                            window.elementSdk._config = { ...window.elementSdk._config, ...cfg };
+                            if (opts && typeof opts.onConfigChange === 'function') {
+                                opts.onConfigChange(window.elementSdk._config);
+                            }
+                        };
+                        return;
+                    },
+                    setConfig: () => {}
+                };
+                console.warn("[elementSdk] fallback mock aktif (development). Jika Anda memiliki _sdk/element_sdk.js, abaikan pesan ini.");
+            }
+        })();
+
+        // --- konfigurasi default dan state aplikasi ---
         const defaultConfig = {
             background_color: "#0f172a",
             card_color: "#1e293b",
@@ -88,7 +146,7 @@
             new_problem_button: "Soal Baru",
             check_answer_button: "Periksa Jawaban"
         };
-        
+
         let config = { ...defaultConfig };
         let currentProblem = null;
         let currentStep = 0;
@@ -97,8 +155,12 @@
         let isLoading = false;
         let showHint = false;
         let learningMode = null; // null, 'bayangan', 'titik_asal', 'translasi'
+        let completedSteps = [];
+        let currentChoices = null;
 
+        // definisi langkah-langkah (sama seperti versi awal, disesuaikan)
         const steps = [
+            // mode bayangan
             {
                 title: "Langkah 1: Identifikasi Titik Awal",
                 question: "Apa koordinat titik awal?",
@@ -178,7 +240,7 @@
                 hint: (problem) => {
                     const x_new = problem.point_x + problem.translation_x;
                     const y_new = problem.point_y + problem.translation_y;
-                    return `Gabungkan hasil x' dan y' yang sudah dihitung: A'(x', y')`;
+                    return `Gabungkan hasil x' dan y' yang sudah dihitung: A'(${x_new}, ${y_new})`;
                 },
                 getChoices: (problem) => {
                     const x_new = problem.point_x + problem.translation_x;
@@ -197,7 +259,8 @@
                 },
                 modes: ['bayangan']
             },
-            // Mode Titik Asal
+
+            // titik_asal mode
             {
                 title: "Langkah 1: Identifikasi Bayangan dan Translasi",
                 question: "Apa yang diketahui dari soal?",
@@ -298,7 +361,8 @@
                 explanation: (problem) => `Titik asal adalah A(${problem.point_x}, ${problem.point_y})`,
                 modes: ['titik_asal']
             },
-            // Mode Mencari Translasi
+
+            // translasi mode
             {
                 title: "Langkah 1: Identifikasi Titik Asal dan Bayangan",
                 question: "Apa yang diketahui dari soal?",
@@ -346,11 +410,10 @@
                     return `Gunakan rumus a = x' - x, dimana x' = ${x_new} dan x = ${problem.point_x}`;
                 },
                 getChoices: (problem) => {
-                    const x_new = problem.point_x + problem.translation_x;
                     return [
                         { text: `a = ${problem.translation_x}`, correct: true },
                         { text: `a = ${-problem.translation_x}`, correct: false },
-                        { text: `a = ${x_new}`, correct: false },
+                        { text: `a = ${problem.point_x + problem.translation_x}`, correct: false },
                         { text: `a = ${problem.point_x}`, correct: false }
                     ];
                 },
@@ -369,11 +432,10 @@
                     return `Gunakan rumus b = y' - y, dimana y' = ${y_new} dan y = ${problem.point_y}`;
                 },
                 getChoices: (problem) => {
-                    const y_new = problem.point_y + problem.translation_y;
                     return [
                         { text: `b = ${problem.translation_y}`, correct: true },
                         { text: `b = ${-problem.translation_y}`, correct: false },
-                        { text: `b = ${y_new}`, correct: false },
+                        { text: `b = ${problem.point_y + problem.translation_y}`, correct: false },
                         { text: `b = ${problem.point_y}`, correct: false }
                     ];
                 },
@@ -401,12 +463,13 @@
             }
         ];
 
+        // util
         function generateProblem() {
             const point_x = Math.floor(Math.random() * 11) - 5;
             const point_y = Math.floor(Math.random() * 11) - 5;
             const translation_x = Math.floor(Math.random() * 9) - 4;
             const translation_y = Math.floor(Math.random() * 9) - 4;
-            
+
             return {
                 problem_id: `problem_${Date.now()}`,
                 point_x,
@@ -419,6 +482,16 @@
             };
         }
 
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        // --- alur aplikasi ---
         function startNewProblem() {
             currentProblem = generateProblem();
             currentStep = 0;
@@ -428,12 +501,12 @@
             currentChoices = null;
             render();
         }
-        
+
         function selectLearningMode(mode) {
             learningMode = mode;
             startNewProblem();
         }
-        
+
         function backToMenu() {
             learningMode = null;
             currentProblem = null;
@@ -444,56 +517,45 @@
             currentChoices = null;
             render();
         }
-        
+
         function getActiveSteps() {
             return steps.filter(step => step.modes.includes(learningMode));
         }
 
-        let completedSteps = [];
-        let currentChoices = null;
-
-        function shuffleArray(array) {
-            const shuffled = [...array];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
-        }
-
         async function checkAnswer(choiceIndex) {
-            if (selectedAnswer !== null || isLoading) return;
-            
+            if (!currentChoices || selectedAnswer !== null || isLoading) return;
+
             selectedAnswer = choiceIndex;
             const isCorrect = currentChoices[choiceIndex].correct;
-            
+
             render();
-            
+
             if (isCorrect) {
                 const activeSteps = getActiveSteps();
                 const currentStepData = activeSteps[currentStep];
-                
+
                 completedSteps.push({
                     step: currentStep,
                     explanation: currentStepData.explanation(currentProblem),
                     title: currentStepData.title
                 });
-                
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
+
+                await new Promise(resolve => setTimeout(resolve, 700));
+
                 if (currentStep < activeSteps.length - 1) {
                     currentStep++;
                     selectedAnswer = null;
                     showHint = false;
                     currentChoices = null;
                 } else {
+                    // selesai
                     currentProblem.current_step = currentStep;
                     currentProblem.completed = true;
                     currentProblem.mode = learningMode;
-                    
+
                     isLoading = true;
                     render();
-                    
+
                     const result = await window.dataSdk.create({
                         problem_id: currentProblem.problem_id,
                         point_x: currentProblem.point_x,
@@ -504,13 +566,21 @@
                         completed: true,
                         timestamp: currentProblem.timestamp
                     });
-                    
+
                     isLoading = false;
-                    
+
                     if (!result.isOk) {
                         showMessage("Terjadi kesalahan saat menyimpan data", "error");
+                    } else {
+                        // update history lokal juga (jika SDK mock)
+                        problemHistory.push(currentProblem);
                     }
                 }
+                render();
+            } else {
+                // incorrect: tunjukkan pesan sebentar
+                await new Promise(resolve => setTimeout(resolve, 600));
+                // jangan auto-move; biarkan pengguna coba lagi atau lihat hint
                 render();
             }
         }
@@ -520,7 +590,7 @@
             messageDiv.className = `fixed top-4 right-4 px-6 py-3 rounded-lg text-white font-semibold shadow-lg z-50 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
             messageDiv.textContent = message;
             document.body.appendChild(messageDiv);
-            
+
             setTimeout(() => {
                 messageDiv.remove();
             }, 3000);
@@ -531,41 +601,49 @@
             render();
         }
 
+        // Gambar koordinat sederhana (grid)
         function drawCoordinateSystem(problem) {
-            const gridSize = 12;
-            const cellSize = 30;
-            const originX = gridSize / 2;
-            const originY = gridSize / 2;
-            
-            let svg = `<svg viewBox="0 0 ${gridSize * cellSize} ${gridSize * cellSize}" class="w-full max-w-md mx-auto" style="background-color: ${config.background_color}; border-radius: 12px; padding: 16px;">`;
-            
+            const gridSize = 12; // jumlah sel (lebar/tinggi)
+            const cellSize = 28; // px per sel
+            const originX = Math.floor(gridSize / 2);
+            const originY = Math.floor(gridSize / 2);
+
+            let svg = `<svg viewBox="0 0 ${gridSize * cellSize} ${gridSize * cellSize}" class="coord-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sistem koordinat">`;
+
+            // background rect
+            svg += `<rect x="0" y="0" width="${gridSize * cellSize}" height="${gridSize * cellSize}" fill="${config.card_color}" rx="8"/>`;
+
+            // grid lines
             for (let i = 0; i <= gridSize; i++) {
                 const pos = i * cellSize;
-                svg += `<line x1="${pos}" y1="0" x2="${pos}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.2"/>`;
-                svg += `<line x1="0" y1="${pos}" x2="${gridSize * cellSize}" y2="${pos}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.2"/>`;
+                svg += `<line x1="${pos}" y1="0" x2="${pos}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.12"/>`;
+                svg += `<line x1="0" y1="${pos}" x2="${gridSize * cellSize}" y2="${pos}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.12"/>`;
             }
-            
-            svg += `<line x1="${originX * cellSize}" y1="0" x2="${originX * cellSize}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="2"/>`;
-            svg += `<line x1="0" y1="${originY * cellSize}" x2="${gridSize * cellSize}" y2="${originY * cellSize}" stroke="${config.text_color}" stroke-width="2"/>`;
-            
+
+            // axis
+            svg += `<line x1="${originX * cellSize}" y1="0" x2="${originX * cellSize}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="1.5" opacity="0.7"/>`;
+            svg += `<line x1="0" y1="${originY * cellSize}" x2="${gridSize * cellSize}" y2="${originY * cellSize}" stroke="${config.text_color}" stroke-width="1.5" opacity="0.7"/>`;
+
+            // defs arrow
+            svg += `<defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="${config.secondary_action_color}"/></marker></defs>`;
+
+            // titik A
             const px = (originX + problem.point_x) * cellSize;
             const py = (originY - problem.point_y) * cellSize;
-            svg += `<circle cx="${px}" cy="${py}" r="6" fill="${config.primary_action_color}"/>`;
-            svg += `<text x="${px + 12}" y="${py - 8}" fill="${config.text_color}" font-size="14" font-weight="600">A</text>`;
-            
-            if (currentStep >= 2) {
+            svg += `<circle cx="${px}" cy="${py}" r="6" fill="${config.primary_action_color}" />`;
+            svg += `<text x="${px + 10}" y="${py - 8}" fill="${config.text_color}" font-size="12" font-weight="600">${'A'}</text>`;
+
+            // jika sudah langkah 3 atau lebih (menunjukkan bayangan)
+            if (currentStep >= 2 || learningMode === 'translasi' || learningMode === 'titik_asal') {
                 const nx = (originX + problem.point_x + problem.translation_x) * cellSize;
                 const ny = (originY - problem.point_y - problem.translation_y) * cellSize;
-                
-                svg += `<line x1="${px}" y1="${py}" x2="${nx}" y2="${ny}" stroke="${config.secondary_action_color}" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>`;
-                
-                svg += `<circle cx="${nx}" cy="${ny}" r="6" fill="${config.secondary_action_color}"/>`;
-                svg += `<text x="${nx + 12}" y="${ny - 8}" fill="${config.text_color}" font-size="14" font-weight="600">A'</text>`;
+
+                svg += `<line x1="${px}" y1="${py}" x2="${nx}" y2="${ny}" stroke="${config.secondary_action_color}" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)"/>`;
+                svg += `<circle cx="${nx}" cy="${ny}" r="6" fill="${config.secondary_action_color}" />`;
+                svg += `<text x="${nx + 10}" y="${ny - 8}" fill="${config.text_color}" font-size="12" font-weight="600">${"A'"}</text>`;
             }
-            
-            svg += `<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${config.secondary_action_color}"/></marker></defs>`;
+
             svg += `</svg>`;
-            
             return svg;
         }
 
@@ -574,296 +652,242 @@
             render();
         }
 
+        // --- render UI ---
         function render() {
             const baseSize = config.font_size || defaultConfig.font_size;
             const customFont = config.font_family || defaultConfig.font_family;
             const fontStack = `${customFont}, Poppins, sans-serif`;
-            
+
             const app = document.getElementById('app');
-            
+
             if (!learningMode) {
                 app.innerHTML = `
-                    <div class="w-full h-full grid-bg overflow-auto p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
-                        <div class="max-w-3xl mx-auto py-4 md:py-8">
-                            <div class="text-center mb-6 md:mb-8 fade-in px-2">
-                                <h1 class="mb-2 md:mb-3 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.8}px;">
+                    <div class="w-full h-full grid-bg overflow-auto p-4" style="background-color: ${config.background_color}; min-height:100vh;">
+                        <div class="max-w-3xl mx-auto py-6">
+                            <div class="text-center mb-6 fade-in px-2">
+                                <h1 class="mb-2 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.8}px;">
                                     ${config.app_title || defaultConfig.app_title}
                                 </h1>
-                                <p class="mb-4 md:mb-8" style="color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack}; font-size: ${baseSize}px;">
+                                <p class="mb-4" style="color: ${config.text_color}; opacity: 0.85; font-family: ${fontStack}; font-size: ${baseSize}px;">
                                     ${config.subtitle || defaultConfig.subtitle}
                                 </p>
                             </div>
-                            
-                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
-                                <h2 class="mb-4 md:mb-6 text-center font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.3}px;">
+
+                            <div class="rounded-xl p-4 mb-6 shadow-lg fade-in" style="background-color: ${config.card_color};">
+                                <h2 class="mb-4 text-center font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
                                     🎯 Pilih Materi Pembelajaran
                                 </h2>
-                                
-                                <div class="grid gap-4 md:gap-6">
-                                    <button onclick="selectLearningMode('bayangan')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.primary_action_color}; border: 3px solid ${config.primary_action_color};">
-                                        <div class="flex items-start gap-3 md:gap-4">
-                                            <div class="text-3xl md:text-4xl">📍</div>
+
+                                <div class="grid gap-4">
+                                    <button onclick="selectLearningMode('bayangan')" class="w-full p-4 rounded-lg text-left transform hover:scale-105 transition-all" style="background-color: ${config.background_color}; color: ${config.text_color};">
+                                        <div class="flex items-start gap-3">
+                                            <div class="text-3xl">📍</div>
                                             <div class="flex-1">
-                                                <h3 class="font-bold mb-2" style="color: white; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                                    1. Mencari Bayangan Titik
-                                                </h3>
-                                                <p style="color: white; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
-                                                    Belajar mencari koordinat bayangan dari titik yang ditranslasikan dengan vektor tertentu.
-                                                </p>
-                                                <p class="mt-2 font-semibold" style="color: white; opacity: 0.95; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                                    Contoh: A(2,3) + T(4,-1) = A'(?, ?)
-                                                </p>
+                                                <h3 class="font-bold mb-1" style="font-size:${baseSize * 1.05}px;">1. Mencari Bayangan Titik</h3>
+                                                <p style="opacity:0.9; font-size:${baseSize * 0.9}px;">Belajar mencari koordinat bayangan dari titik yang ditranslasikan dengan vektor tertentu.</p>
                                             </div>
                                         </div>
                                     </button>
-                                    
-                                    <button onclick="selectLearningMode('titik_asal')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.secondary_action_color}; border: 3px solid ${config.secondary_action_color};">
-                                        <div class="flex items-start gap-3 md:gap-4">
-                                            <div class="text-3xl md:text-4xl">🔍</div>
+
+                                    <button onclick="selectLearningMode('titik_asal')" class="w-full p-4 rounded-lg text-left transform hover:scale-105 transition-all" style="background-color: ${config.background_color}; color: ${config.text_color};">
+                                        <div class="flex items-start gap-3">
+                                            <div class="text-3xl">🔍</div>
                                             <div class="flex-1">
-                                                <h3 class="font-bold mb-2" style="color: white; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                                    2. Mencari Titik Asal
-                                                </h3>
-                                                <p style="color: white; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
-                                                    Belajar mencari koordinat titik awal jika diketahui bayangan dan vektor translasinya.
-                                                </p>
-                                                <p class="mt-2 font-semibold" style="color: white; opacity: 0.95; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                                    Contoh: A'(6,2) dari T(4,-1) = A(?, ?)
-                                                </p>
+                                                <h3 class="font-bold mb-1" style="font-size:${baseSize * 1.05}px;">2. Mencari Titik Asal</h3>
+                                                <p style="opacity:0.9; font-size:${baseSize * 0.9}px;">Belajar mencari koordinat titik awal jika diketahui bayangan dan vektor translasinya.</p>
                                             </div>
                                         </div>
                                     </button>
-                                    
-                                    <button onclick="selectLearningMode('translasi')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.card_color}; border: 3px solid ${config.primary_action_color};">
-                                        <div class="flex items-start gap-3 md:gap-4">
-                                            <div class="text-3xl md:text-4xl">↗️</div>
+
+                                    <button onclick="selectLearningMode('translasi')" class="w-full p-4 rounded-lg text-left transform hover:scale-105 transition-all" style="background-color: ${config.background_color}; color: ${config.text_color};">
+                                        <div class="flex items-start gap-3">
+                                            <div class="text-3xl">↗️</div>
                                             <div class="flex-1">
-                                                <h3 class="font-bold mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                                    3. Mencari Vektor Translasi
-                                                </h3>
-                                                <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
-                                                    Belajar mencari vektor translasi jika diketahui titik asal dan bayangannya.
-                                                </p>
-                                                <p class="mt-2 font-semibold" style="color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                                    Contoh: A(2,3) ke A'(6,2) = T(?, ?)
-                                                </p>
+                                                <h3 class="font-bold mb-1" style="font-size:${baseSize * 1.05}px;">3. Mencari Vektor Translasi</h3>
+                                                <p style="opacity:0.9; font-size:${baseSize * 0.9}px;">Belajar mencari vektor translasi jika diketahui titik asal dan bayangannya.</p>
                                             </div>
                                         </div>
                                     </button>
                                 </div>
                             </div>
-                            
-                            <div class="mt-6 md:mt-8 text-center">
-                                <p class="font-semibold" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                    📊 Total Soal Terselesaikan: ${problemHistory.length}
-                                </p>
+
+                            <div class="text-center mt-6">
+                                <p class="font-semibold" style="color: ${config.text_color}; opacity: 0.8;">📊 Total Soal Terselesaikan: ${problemHistory.length}</p>
                             </div>
-                            
-                            <div class="mt-8 md:mt-12 pt-6 md:pt-8 border-t text-center" style="border-color: ${config.text_color}; border-opacity: 0.2;">
-                                <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                    MATHNOLOGY
-                                </p>
+
+                            <div class="mt-8 pt-6 border-t text-center" style="border-color: ${config.text_color}; border-opacity: 0.12;">
+                                <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-size:${baseSize * 1.05}px;">MATHNOLOGY</p>
                             </div>
                         </div>
                     </div>
                 `;
                 return;
             }
-            
+
+            if (!currentProblem) {
+                startNewProblem();
+                return;
+            }
+
             const activeSteps = getActiveSteps();
             const step = activeSteps[currentStep];
-            
-            // Generate dan shuffle choices hanya sekali per step
+
+            // Generate and shuffle choices once per step
             if (!currentChoices) {
                 const originalChoices = step.getChoices(currentProblem);
                 currentChoices = shuffleArray(originalChoices);
             }
-            
-            const isCompleted = currentStep === activeSteps.length - 1 && selectedAnswer !== null && currentChoices[selectedAnswer].correct;
-            
-            // Tentukan soal berdasarkan mode
-            let soalText = '';
+
+            const isCompleted = currentStep === activeSteps.length - 1 && selectedAnswer !== null && currentChoices[selectedAnswer] && currentChoices[selectedAnswer].correct;
+
+            // soal text
             const x_new = currentProblem.point_x + currentProblem.translation_x;
             const y_new = currentProblem.point_y + currentProblem.translation_y;
-            
+            let soalText = '';
             if (learningMode === 'bayangan') {
-                soalText = `Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan oleh T(${currentProblem.translation_x}, ${currentProblem.translation_y}). Tentukan bayangan titik A!`;
+                soalText = `Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan oleh T(${currentProblem.translation_x}, ${currentProblem.translation_y}). Tentukan bayangan A'!`;
             } else if (learningMode === 'titik_asal') {
                 soalText = `Bayangan titik A oleh translasi T(${currentProblem.translation_x}, ${currentProblem.translation_y}) adalah A'(${x_new}, ${y_new}). Tentukan koordinat titik A!`;
             } else if (learningMode === 'translasi') {
                 soalText = `Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan menjadi A'(${x_new}, ${y_new}). Tentukan vektor translasi T!`;
             }
-            
+
             const modeName = {
                 'bayangan': 'Mencari Bayangan Titik',
                 'titik_asal': 'Mencari Titik Asal',
                 'translasi': 'Mencari Vektor Translasi'
             };
-            
+
             app.innerHTML = `
-                <div class="w-full h-full grid-bg p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
+                <div class="w-full h-full grid-bg p-4" style="background-color: ${config.background_color}; min-height:100vh;">
                     <div class="max-w-4xl mx-auto">
-                        <div class="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
-                            <div class="flex items-center gap-2 md:gap-3">
-                                <button onclick="backToMenu()" class="px-3 py-2 rounded-lg transition-all" style="background-color: ${config.card_color}; color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                    ← Menu
-                                </button>
-                                <h1 class="font-bold text-center sm:text-left" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
-                                    ${modeName[learningMode]}
-                                </h1>
+                        <div class="mb-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                <button onclick="backToMenu()" class="px-3 py-2 rounded-lg" style="background-color: ${config.card_color}; color: ${config.text_color};">← Menu</button>
+                                <h1 class="font-bold" style="color: ${config.text_color}; font-size:${baseSize * 1.1}px;">${modeName[learningMode]}</h1>
                             </div>
-                            <button onclick="startNewProblem()" class="w-full sm:w-auto px-4 md:px-6 py-2 rounded-lg font-semibold transition-all whitespace-nowrap" style="background-color: ${config.secondary_action_color}; color: white; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                ${config.new_problem_button || defaultConfig.new_problem_button}
-                            </button>
+                            <button onclick="startNewProblem()" class="px-4 py-2 rounded-lg font-semibold" style="background-color: ${config.primary_action_color}; color: white;">${config.new_problem_button}</button>
                         </div>
-                        
-                        <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl" style="background-color: ${config.card_color};">
-                            <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">Soal:</h2>
-                            <p class="mb-3 md:mb-4" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px; line-height: 1.5;">
-                                ${soalText}
-                            </p>
+
+                        <div class="rounded-xl p-4 mb-4 shadow-lg" style="background-color: ${config.card_color};">
+                            <h2 class="mb-3 font-bold" style="color: ${config.text_color}; font-size:${baseSize * 1.05}px;">Soal:</h2>
+                            <p class="mb-3" style="color: ${config.text_color}; opacity: 0.9; font-size:${baseSize * 0.95}px;">${soalText}</p>
                             ${drawCoordinateSystem(currentProblem)}
                         </div>
-                        
-                        <div class="mb-4 md:mb-6 flex gap-1.5 md:gap-2">
+
+                        <div class="mb-4 flex gap-1.5">
                             ${activeSteps.map((s, idx) => `
-                                <div class="flex-1 h-1.5 md:h-2 rounded-full transition-all" style="background-color: ${idx <= currentStep ? config.primary_action_color : config.card_color};"></div>
+                                <div class="flex-1 h-1.5 rounded-full" style="background-color: ${idx <= currentStep ? config.primary_action_color : config.card_color};"></div>
                             `).join('')}
                         </div>
-                        
-                        <div class="rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl step-card ${currentStep >= 0 ? 'active' : ''} fade-in" style="background-color: ${config.card_color};">
-                            <h3 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                ${step.title}
-                            </h3>
-                            
+
+                        <div class="rounded-xl p-4 mb-4 shadow-lg step-card ${currentStep >= 0 ? 'active' : ''}">
+                            <h3 class="mb-3 font-bold" style="color: ${config.primary_action_color}; font-size:${baseSize * 1.02}px;">${step.title}</h3>
+
                             ${step.formula ? `
-                                <div class="mb-3 md:mb-4 p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color};">
-                                    <p class="mb-1" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.8}px;">
-                                        📐 Rumus:
-                                    </p>
-                                    <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                        ${step.formula}
-                                    </p>
+                                <div class="mb-3 p-3 rounded" style="background-color: ${config.background_color};">
+                                    <p class="mb-1" style="color: ${config.text_color}; opacity: 0.7; font-size:${baseSize * 0.8}px;">📐 Rumus:</p>
+                                    <p class="font-bold" style="color: ${config.secondary_action_color}; font-size:${baseSize * 1.02}px;">${step.formula}</p>
                                 </div>
                             ` : ''}
-                            
+
                             ${step.hint ? `
-                                <div class="mb-3 md:mb-4">
-                                    <button onclick="toggleHint()" class="w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition-all mb-2 md:mb-3" style="background-color: ${config.background_color}; color: ${config.text_color}; border: 2px solid ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                <div class="mb-3">
+                                    <button onclick="toggleHint()" class="w-full sm:w-auto px-4 py-2 rounded-lg font-semibold mb-2" style="background-color: ${config.background_color}; color:${config.text_color};">
                                         ${showHint ? '🔼 Sembunyikan Petunjuk' : '💡 Lihat Petunjuk'}
                                     </button>
                                     ${showHint ? `
-                                        <div class="p-3 rounded-lg" style="background-color: ${config.background_color}; border-left: 4px solid ${config.primary_action_color};">
-                                            <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px; line-height: 1.5;">
-                                                💡 ${typeof step.hint === 'function' ? step.hint(currentProblem) : step.hint}
-                                            </p>
+                                        <div class="p-3 rounded" style="background-color: ${config.background_color}; border-left: 4px solid ${config.primary_action_color};">
+                                            <p style="color: ${config.text_color}; opacity: 0.95;">💡 ${typeof step.hint === 'function' ? step.hint(currentProblem) : step.hint}</p>
                                         </div>
                                     ` : ''}
                                 </div>
                             ` : ''}
-                            
-                            <p class="mb-4 md:mb-6 font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
-                                ${step.question}
-                            </p>
-                            
-                            <div class="grid gap-2 md:gap-3 mb-4 md:mb-6">
+
+                            <p class="mb-4 font-semibold" style="color: ${config.text_color}; font-size:${baseSize * 0.95}px;">${step.question}</p>
+
+                            <div class="grid gap-3 mb-4">
                                 ${currentChoices.map((choice, idx) => {
                                     let bgColor = config.card_color;
-                                    let borderColor = config.text_color;
-                                    let opacity = '0.3';
+                                    let textColor = config.text_color;
                                     let classes = 'choice-btn';
-                                    
                                     if (selectedAnswer === idx) {
                                         if (choice.correct) {
                                             bgColor = config.secondary_action_color;
-                                            borderColor = config.secondary_action_color;
-                                            opacity = '1';
+                                            textColor = '#ffffff';
                                             classes += ' correct';
                                         } else {
                                             bgColor = '#ef4444';
-                                            borderColor = '#ef4444';
-                                            opacity = '1';
+                                            textColor = '#ffffff';
                                             classes += ' incorrect';
                                         }
                                     }
-                                    
-                                    const disabled = selectedAnswer !== null ? 'pointer-events-none' : '';
-                                    
+                                    const disabled = selectedAnswer !== null ? 'pointer-events-none opacity-80' : '';
                                     return `
-                                        <button onclick="checkAnswer(${idx})" class="${classes} ${disabled} p-3 md:p-4 rounded-lg md:rounded-xl font-semibold text-left transition-all" style="background-color: ${bgColor}; border: 2px solid ${borderColor}; border-opacity: ${opacity}; color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.4;">
+                                        <button onclick="checkAnswer(${idx})" class="${classes} ${disabled} p-3 rounded-lg text-left font-semibold" style="background-color:${bgColor}; color:${textColor}; border: 1px solid rgba(255,255,255,0.04);">
                                             ${String.fromCharCode(65 + idx)}. ${choice.text}
                                         </button>
                                     `;
                                 }).join('')}
                             </div>
-                            
-                            ${selectedAnswer !== null && currentChoices[selectedAnswer].correct ? `
-                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl fade-in" style="background-color: ${config.secondary_action_color}; background-opacity: 0.2; border: 2px solid ${config.secondary_action_color};">
-                                    <p class="font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
-                                        ✓ Benar! ${step.explanation(currentProblem)}
-                                    </p>
+
+                            ${selectedAnswer !== null && currentChoices[selectedAnswer] && currentChoices[selectedAnswer].correct ? `
+                                <div class="p-3 rounded fade-in" style="background-color: ${config.secondary_action_color}; color: ${config.text_color};">
+                                    <p class="font-semibold">✓ Benar! ${step.explanation(currentProblem)}</p>
                                 </div>
                             ` : ''}
                         </div>
-                        
+
                         ${completedSteps.length > 0 ? `
-                            <div class="mt-4 md:mt-6 rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
-                                <h3 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                    📋 Pembahasan Lengkap
-                                </h3>
-                                <div class="space-y-3 md:space-y-4">
-                                    ${completedSteps.map((completed, idx) => `
-                                        <div class="p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color}; border-left: 3px md:border-left-4 solid ${config.secondary_action_color};">
-                                            <h4 class="font-semibold mb-1 md:mb-2" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
-                                                ${completed.title}
-                                            </h4>
-                                            <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px; line-height: 1.5;">
-                                                ${completed.explanation}
-                                            </p>
+                            <div class="mt-4 rounded-xl p-4 shadow-lg" style="background-color: ${config.card_color};">
+                                <h3 class="mb-3 font-bold" style="color: ${config.primary_action_color}; font-size:${baseSize * 1.02}px;">📋 Pembahasan Lengkap</h3>
+                                <div class="space-y-3">
+                                    ${completedSteps.map((completed) => `
+                                        <div class="p-3 rounded" style="background-color: ${config.background_color}; border-left: 3px solid ${config.secondary_action_color};">
+                                            <h4 class="font-semibold" style="color: ${config.secondary_action_color};">${completed.title}</h4>
+                                            <p style="color: ${config.text_color}; opacity: 0.95;">${completed.explanation}</p>
                                         </div>
                                     `).join('')}
                                 </div>
                             </div>
                         ` : ''}
-                        
+
                         ${isCompleted ? `
-                            <div class="mt-4 md:mt-6 p-4 md:p-6 rounded-lg md:rounded-xl text-center fade-in" style="background-color: ${config.primary_action_color}; background-opacity: 0.2; border: 2px solid ${config.primary_action_color};">
-                                <h3 class="mb-2 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.3}px;">🎉 Selamat!</h3>
-                                <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
-                                    Anda telah menyelesaikan soal translasi ini dengan sempurna!
-                                </p>
+                            <div class="mt-4 p-4 rounded text-center" style="background-color: ${config.primary_action_color}; color: ${config.text_color};">
+                                <h3 class="font-bold">🎉 Selamat!</h3>
+                                <p>Anda telah menyelesaikan soal translasi ini dengan sempurna!</p>
                             </div>
                         ` : ''}
-                        </div>
-                        
+
                         ${isLoading ? `
                             <div class="text-center mt-4">
-                                <p style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">Menyimpan progress...</p>
+                                <p style="color: ${config.text_color}; opacity: 0.8;">Menyimpan progress...</p>
                             </div>
                         ` : ''}
-                        
-                        <div class="text-center mt-8 md:mt-12 pt-6 md:pt-8 border-t" style="border-color: ${config.text_color}; border-opacity: 0.2;">
-                            <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                MATHNOLOGY
-                            </p>
+
+                        <div class="text-center mt-8 pt-6 border-t" style="border-color: ${config.text_color}; border-opacity: 0.12;">
+                            <p class="font-bold tracking-wider" style="color: ${config.primary_action_color};">MATHNOLOGY</p>
                         </div>
                     </div>
                 </div>
             `;
         }
 
+        // data handler untuk SDK
         const dataHandler = {
             onDataChanged(data) {
-                problemHistory = data;
+                problemHistory = data || [];
+                render();
             }
         };
 
+        // init aplikasi
         async function init() {
             const initResult = await window.dataSdk.init(dataHandler);
             if (!initResult.isOk) {
                 console.error("Failed to initialize data SDK");
             }
-            
+
             window.elementSdk.init({
                 defaultConfig,
                 onConfigChange,
@@ -928,11 +952,11 @@
                     ["check_answer_button", cfg.check_answer_button || defaultConfig.check_answer_button]
                 ])
             });
-            
+
             render();
         }
 
         init();
-    </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ba0ecf8f4c98e41',t:'MTc2Nzc2MjM4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  </script>
+ </body>
 </html>
