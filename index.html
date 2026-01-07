@@ -96,6 +96,7 @@
         let problemHistory = [];
         let isLoading = false;
         let showHint = false;
+        let learningMode = null; // null, 'bayangan', 'titik_asal', 'translasi'
 
         const steps = [
             {
@@ -111,7 +112,8 @@
                         { text: `A(${problem.point_x}, ${-problem.point_y})`, correct: false }
                     ];
                 },
-                explanation: (problem) => `Titik awal adalah A(${problem.point_x}, ${problem.point_y}), dimana x = ${problem.point_x} dan y = ${problem.point_y}`
+                explanation: (problem) => `Titik awal adalah A(${problem.point_x}, ${problem.point_y}), dimana x = ${problem.point_x} dan y = ${problem.point_y}`,
+                modes: ['bayangan']
             },
             {
                 title: "Langkah 2: Identifikasi Vektor Translasi",
@@ -126,7 +128,8 @@
                         { text: `a = ${problem.translation_x}, b = ${-problem.translation_y}`, correct: false }
                     ];
                 },
-                explanation: (problem) => `Dari T(${problem.translation_x}, ${problem.translation_y}), kita dapatkan: a = ${problem.translation_x} dan b = ${problem.translation_y}`
+                explanation: (problem) => `Dari T(${problem.translation_x}, ${problem.translation_y}), kita dapatkan: a = ${problem.translation_x} dan b = ${problem.translation_y}`,
+                modes: ['bayangan']
             },
             {
                 title: "Langkah 3: Hitung Koordinat X Baru",
@@ -145,7 +148,8 @@
                 explanation: (problem) => {
                     const result = problem.point_x + problem.translation_x;
                     return `Menggunakan rumus x' = x + a → x' = ${problem.point_x} + (${problem.translation_x}) = ${result}`;
-                }
+                },
+                modes: ['bayangan']
             },
             {
                 title: "Langkah 4: Hitung Koordinat Y Baru",
@@ -164,7 +168,8 @@
                 explanation: (problem) => {
                     const result = problem.point_y + problem.translation_y;
                     return `Menggunakan rumus y' = y + b → y' = ${problem.point_y} + (${problem.translation_y}) = ${result}`;
-                }
+                },
+                modes: ['bayangan']
             },
             {
                 title: "Langkah 5: Tentukan Bayangan",
@@ -189,7 +194,210 @@
                     const x_new = problem.point_x + problem.translation_x;
                     const y_new = problem.point_y + problem.translation_y;
                     return `Bayangan titik A adalah A'(${x_new}, ${y_new}) dari hasil x' = ${x_new} dan y' = ${y_new}`;
-                }
+                },
+                modes: ['bayangan']
+            },
+            // Mode Titik Asal
+            {
+                title: "Langkah 1: Identifikasi Bayangan dan Translasi",
+                question: "Apa yang diketahui dari soal?",
+                formula: "A'(x', y') dan T(a, b)",
+                hint: "Catat koordinat bayangan A' dan vektor translasi T",
+                getChoices: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `A'(${x_new}, ${y_new}) dan T(${problem.translation_x}, ${problem.translation_y})`, correct: true },
+                        { text: `A'(${y_new}, ${x_new}) dan T(${problem.translation_x}, ${problem.translation_y})`, correct: false },
+                        { text: `A'(${x_new}, ${y_new}) dan T(${problem.translation_y}, ${problem.translation_x})`, correct: false },
+                        { text: `A(${problem.point_x}, ${problem.point_y}) dan T(${problem.translation_x}, ${problem.translation_y})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Yang diketahui: Bayangan A'(${x_new}, ${y_new}) dan Translasi T(${problem.translation_x}, ${problem.translation_y})`;
+                },
+                modes: ['titik_asal']
+            },
+            {
+                title: "Langkah 2: Rumus Mencari Titik Asal",
+                question: "Rumus apa yang digunakan untuk mencari titik asal?",
+                formula: "x = x' - a dan y = y' - b",
+                hint: "Untuk mencari titik asal, kita kurangkan vektor translasi dari bayangan",
+                getChoices: (problem) => {
+                    return [
+                        { text: `x = x' - a dan y = y' - b`, correct: true },
+                        { text: `x = x' + a dan y = y' + b`, correct: false },
+                        { text: `x' = x - a dan y' = y - b`, correct: false },
+                        { text: `x = x' × a dan y = y' × b`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Untuk mencari titik asal dari bayangan, gunakan rumus: x = x' - a dan y = y' - b`,
+                modes: ['titik_asal']
+            },
+            {
+                title: "Langkah 3: Hitung Koordinat X Asal",
+                question: "Berapa koordinat x dari titik asal?",
+                formula: "x = x' - a",
+                hint: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return `Gunakan rumus x = x' - a, dimana x' = ${x_new} dan a = ${problem.translation_x}`;
+                },
+                getChoices: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return [
+                        { text: `x = ${problem.point_x}`, correct: true },
+                        { text: `x = ${x_new + problem.translation_x}`, correct: false },
+                        { text: `x = ${x_new - problem.translation_y}`, correct: false },
+                        { text: `x = ${x_new}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return `Menggunakan rumus x = x' - a → x = ${x_new} - (${problem.translation_x}) = ${problem.point_x}`;
+                },
+                modes: ['titik_asal']
+            },
+            {
+                title: "Langkah 4: Hitung Koordinat Y Asal",
+                question: "Berapa koordinat y dari titik asal?",
+                formula: "y = y' - b",
+                hint: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Gunakan rumus y = y' - b, dimana y' = ${y_new} dan b = ${problem.translation_y}`;
+                },
+                getChoices: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `y = ${problem.point_y}`, correct: true },
+                        { text: `y = ${y_new + problem.translation_y}`, correct: false },
+                        { text: `y = ${y_new - problem.translation_x}`, correct: false },
+                        { text: `y = ${y_new}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Menggunakan rumus y = y' - b → y = ${y_new} - (${problem.translation_y}) = ${problem.point_y}`;
+                },
+                modes: ['titik_asal']
+            },
+            {
+                title: "Langkah 5: Tentukan Titik Asal",
+                question: "Apa koordinat titik asal A?",
+                formula: "A(x, y) = A(x' - a, y' - b)",
+                hint: (problem) => `Gabungkan hasil x dan y yang sudah dihitung`,
+                getChoices: (problem) => {
+                    return [
+                        { text: `A(${problem.point_x}, ${problem.point_y})`, correct: true },
+                        { text: `A(${problem.point_y}, ${problem.point_x})`, correct: false },
+                        { text: `A(${-problem.point_x}, ${problem.point_y})`, correct: false },
+                        { text: `A(${problem.point_x + problem.translation_x * 2}, ${problem.point_y})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Titik asal adalah A(${problem.point_x}, ${problem.point_y})`,
+                modes: ['titik_asal']
+            },
+            // Mode Mencari Translasi
+            {
+                title: "Langkah 1: Identifikasi Titik Asal dan Bayangan",
+                question: "Apa yang diketahui dari soal?",
+                formula: "A(x, y) dan A'(x', y')",
+                hint: "Catat koordinat titik asal A dan bayangan A'",
+                getChoices: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `A(${problem.point_x}, ${problem.point_y}) dan A'(${x_new}, ${y_new})`, correct: true },
+                        { text: `A(${problem.point_y}, ${problem.point_x}) dan A'(${x_new}, ${y_new})`, correct: false },
+                        { text: `A(${problem.point_x}, ${problem.point_y}) dan A'(${y_new}, ${x_new})`, correct: false },
+                        { text: `A(${x_new}, ${y_new}) dan A'(${problem.point_x}, ${problem.point_y})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Yang diketahui: Titik asal A(${problem.point_x}, ${problem.point_y}) dan Bayangan A'(${x_new}, ${y_new})`;
+                },
+                modes: ['translasi']
+            },
+            {
+                title: "Langkah 2: Rumus Mencari Translasi",
+                question: "Rumus apa yang digunakan untuk mencari vektor translasi?",
+                formula: "a = x' - x dan b = y' - y",
+                hint: "Untuk mencari translasi, kurangkan titik asal dari bayangan",
+                getChoices: (problem) => {
+                    return [
+                        { text: `a = x' - x dan b = y' - y`, correct: true },
+                        { text: `a = x - x' dan b = y - y'`, correct: false },
+                        { text: `a = x + x' dan b = y + y'`, correct: false },
+                        { text: `a = x' × x dan b = y' × y`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Untuk mencari vektor translasi, gunakan rumus: a = x' - x dan b = y' - y`,
+                modes: ['translasi']
+            },
+            {
+                title: "Langkah 3: Hitung Nilai a",
+                question: "Berapa nilai a dari vektor translasi?",
+                formula: "a = x' - x",
+                hint: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return `Gunakan rumus a = x' - x, dimana x' = ${x_new} dan x = ${problem.point_x}`;
+                },
+                getChoices: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return [
+                        { text: `a = ${problem.translation_x}`, correct: true },
+                        { text: `a = ${-problem.translation_x}`, correct: false },
+                        { text: `a = ${x_new}`, correct: false },
+                        { text: `a = ${problem.point_x}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    return `Menggunakan rumus a = x' - x → a = ${x_new} - ${problem.point_x} = ${problem.translation_x}`;
+                },
+                modes: ['translasi']
+            },
+            {
+                title: "Langkah 4: Hitung Nilai b",
+                question: "Berapa nilai b dari vektor translasi?",
+                formula: "b = y' - y",
+                hint: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Gunakan rumus b = y' - y, dimana y' = ${y_new} dan y = ${problem.point_y}`;
+                },
+                getChoices: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `b = ${problem.translation_y}`, correct: true },
+                        { text: `b = ${-problem.translation_y}`, correct: false },
+                        { text: `b = ${y_new}`, correct: false },
+                        { text: `b = ${problem.point_y}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Menggunakan rumus b = y' - y → b = ${y_new} - ${problem.point_y} = ${problem.translation_y}`;
+                },
+                modes: ['translasi']
+            },
+            {
+                title: "Langkah 5: Tentukan Vektor Translasi",
+                question: "Apa vektor translasi T(a, b)?",
+                formula: "T(a, b) = T(x' - x, y' - y)",
+                hint: (problem) => `Gabungkan hasil a dan b yang sudah dihitung`,
+                getChoices: (problem) => {
+                    return [
+                        { text: `T(${problem.translation_x}, ${problem.translation_y})`, correct: true },
+                        { text: `T(${problem.translation_y}, ${problem.translation_x})`, correct: false },
+                        { text: `T(${-problem.translation_x}, ${problem.translation_y})`, correct: false },
+                        { text: `T(${problem.translation_x}, ${-problem.translation_y})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Vektor translasi adalah T(${problem.translation_x}, ${problem.translation_y})`,
+                modes: ['translasi']
             }
         ];
 
@@ -220,6 +428,26 @@
             currentChoices = null;
             render();
         }
+        
+        function selectLearningMode(mode) {
+            learningMode = mode;
+            startNewProblem();
+        }
+        
+        function backToMenu() {
+            learningMode = null;
+            currentProblem = null;
+            currentStep = 0;
+            selectedAnswer = null;
+            completedSteps = [];
+            showHint = false;
+            currentChoices = null;
+            render();
+        }
+        
+        function getActiveSteps() {
+            return steps.filter(step => step.modes.includes(learningMode));
+        }
 
         let completedSteps = [];
         let currentChoices = null;
@@ -242,15 +470,18 @@
             render();
             
             if (isCorrect) {
+                const activeSteps = getActiveSteps();
+                const currentStepData = activeSteps[currentStep];
+                
                 completedSteps.push({
                     step: currentStep,
-                    explanation: steps[currentStep].explanation(currentProblem),
-                    title: steps[currentStep].title
+                    explanation: currentStepData.explanation(currentProblem),
+                    title: currentStepData.title
                 });
                 
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                if (currentStep < steps.length - 1) {
+                if (currentStep < activeSteps.length - 1) {
                     currentStep++;
                     selectedAnswer = null;
                     showHint = false;
@@ -258,6 +489,7 @@
                 } else {
                     currentProblem.current_step = currentStep;
                     currentProblem.completed = true;
+                    currentProblem.mode = learningMode;
                     
                     isLoading = true;
                     render();
@@ -349,7 +581,7 @@
             
             const app = document.getElementById('app');
             
-            if (!currentProblem) {
+            if (!learningMode) {
                 app.innerHTML = `
                     <div class="w-full h-full grid-bg overflow-auto p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
                         <div class="max-w-3xl mx-auto py-4 md:py-8">
@@ -363,80 +595,74 @@
                             </div>
                             
                             <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
-                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
-                                    📐 Apa itu Translasi?
+                                <h2 class="mb-4 md:mb-6 text-center font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.3}px;">
+                                    🎯 Pilih Materi Pembelajaran
                                 </h2>
-                                <p class="mb-3 md:mb-4" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px; line-height: 1.6;">
-                                    <strong>Translasi</strong> adalah perpindahan suatu titik atau bangun geometri dari satu posisi ke posisi lain dengan arah dan jarak tertentu. Dalam translasi, bentuk dan ukuran objek tidak berubah, hanya posisinya saja yang berpindah.
+                                
+                                <div class="grid gap-4 md:gap-6">
+                                    <button onclick="selectLearningMode('bayangan')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.primary_action_color}; border: 3px solid ${config.primary_action_color};">
+                                        <div class="flex items-start gap-3 md:gap-4">
+                                            <div class="text-3xl md:text-4xl">📍</div>
+                                            <div class="flex-1">
+                                                <h3 class="font-bold mb-2" style="color: white; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                                    1. Mencari Bayangan Titik
+                                                </h3>
+                                                <p style="color: white; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
+                                                    Belajar mencari koordinat bayangan dari titik yang ditranslasikan dengan vektor tertentu.
+                                                </p>
+                                                <p class="mt-2 font-semibold" style="color: white; opacity: 0.95; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                                    Contoh: A(2,3) + T(4,-1) = A'(?, ?)
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                    
+                                    <button onclick="selectLearningMode('titik_asal')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.secondary_action_color}; border: 3px solid ${config.secondary_action_color};">
+                                        <div class="flex items-start gap-3 md:gap-4">
+                                            <div class="text-3xl md:text-4xl">🔍</div>
+                                            <div class="flex-1">
+                                                <h3 class="font-bold mb-2" style="color: white; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                                    2. Mencari Titik Asal
+                                                </h3>
+                                                <p style="color: white; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
+                                                    Belajar mencari koordinat titik awal jika diketahui bayangan dan vektor translasinya.
+                                                </p>
+                                                <p class="mt-2 font-semibold" style="color: white; opacity: 0.95; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                                    Contoh: A'(6,2) dari T(4,-1) = A(?, ?)
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                    
+                                    <button onclick="selectLearningMode('translasi')" class="w-full p-4 md:p-6 rounded-lg md:rounded-xl text-left transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.card_color}; border: 3px solid ${config.primary_action_color};">
+                                        <div class="flex items-start gap-3 md:gap-4">
+                                            <div class="text-3xl md:text-4xl">↗️</div>
+                                            <div class="flex-1">
+                                                <h3 class="font-bold mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                                    3. Mencari Vektor Translasi
+                                                </h3>
+                                                <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
+                                                    Belajar mencari vektor translasi jika diketahui titik asal dan bayangannya.
+                                                </p>
+                                                <p class="mt-2 font-semibold" style="color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                                    Contoh: A(2,3) ke A'(6,2) = T(?, ?)
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-6 md:mt-8 text-center">
+                                <p class="font-semibold" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                    📊 Total Soal Terselesaikan: ${problemHistory.length}
                                 </p>
                             </div>
                             
-                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
-                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
-                                    📝 Rumus Translasi Titik
-                                </h2>
-                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl mb-3 md:mb-4" style="background-color: ${config.background_color};">
-                                    <p class="mb-2 font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
-                                        Jika titik A(x, y) ditranslasikan oleh T(a, b), maka:
-                                    </p>
-                                    <p class="font-bold text-center py-2 md:py-3" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                        A'(x', y') = A(x + a, y + b)
-                                    </p>
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                                    <div class="p-3 rounded-lg" style="background-color: ${config.background_color};">
-                                        <p class="font-semibold mb-1" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
-                                            Koordinat x baru:
-                                        </p>
-                                        <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                            x' = x + a
-                                        </p>
-                                    </div>
-                                    <div class="p-3 rounded-lg" style="background-color: ${config.background_color};">
-                                        <p class="font-semibold mb-1" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
-                                            Koordinat y baru:
-                                        </p>
-                                        <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                            y' = y + b
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
-                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
-                                    💡 Contoh
-                                </h2>
-                                <p class="mb-3" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
-                                    Titik A(2, 3) ditranslasikan oleh T(4, -1)
+                            <div class="mt-8 md:mt-12 pt-6 md:pt-8 border-t text-center" style="border-color: ${config.text_color}; border-opacity: 0.2;">
+                                <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                    MATHNOLOGY
                                 </p>
-                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color};">
-                                    <p class="mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
-                                        x' = 2 + 4 = <span class="font-bold" style="color: ${config.secondary_action_color};">6</span>
-                                    </p>
-                                    <p class="mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
-                                        y' = 3 + (-1) = <span class="font-bold" style="color: ${config.secondary_action_color};">2</span>
-                                    </p>
-                                    <p class="font-bold mt-2 md:mt-3" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
-                                        Hasil: A'(6, 2)
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <div class="text-center px-4">
-                                <button onclick="startNewProblem()" class="w-full sm:w-auto px-6 md:px-8 py-3 md:py-4 rounded-lg md:rounded-xl font-semibold transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.primary_action_color}; color: white; font-family: ${fontStack}; font-size: ${baseSize}px;">
-                                    ${config.new_problem_button || defaultConfig.new_problem_button}
-                                </button>
-                                <div class="mt-6 md:mt-8">
-                                    <p class="font-semibold" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
-                                        📊 Riwayat Soal Terselesaikan: ${problemHistory.length}
-                                    </p>
-                                </div>
-                                <div class="mt-8 md:mt-12 pt-6 md:pt-8 border-t" style="border-color: ${config.text_color}; border-opacity: 0.2;">
-                                    <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
-                                        MATHNOLOGY
-                                    </p>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -444,7 +670,8 @@
                 return;
             }
             
-            const step = steps[currentStep];
+            const activeSteps = getActiveSteps();
+            const step = activeSteps[currentStep];
             
             // Generate dan shuffle choices hanya sekali per step
             if (!currentChoices) {
@@ -452,15 +679,39 @@
                 currentChoices = shuffleArray(originalChoices);
             }
             
-            const isCompleted = currentStep === steps.length - 1 && selectedAnswer !== null && currentChoices[selectedAnswer].correct;
+            const isCompleted = currentStep === activeSteps.length - 1 && selectedAnswer !== null && currentChoices[selectedAnswer].correct;
+            
+            // Tentukan soal berdasarkan mode
+            let soalText = '';
+            const x_new = currentProblem.point_x + currentProblem.translation_x;
+            const y_new = currentProblem.point_y + currentProblem.translation_y;
+            
+            if (learningMode === 'bayangan') {
+                soalText = `Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan oleh T(${currentProblem.translation_x}, ${currentProblem.translation_y}). Tentukan bayangan titik A!`;
+            } else if (learningMode === 'titik_asal') {
+                soalText = `Bayangan titik A oleh translasi T(${currentProblem.translation_x}, ${currentProblem.translation_y}) adalah A'(${x_new}, ${y_new}). Tentukan koordinat titik A!`;
+            } else if (learningMode === 'translasi') {
+                soalText = `Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan menjadi A'(${x_new}, ${y_new}). Tentukan vektor translasi T!`;
+            }
+            
+            const modeName = {
+                'bayangan': 'Mencari Bayangan Titik',
+                'titik_asal': 'Mencari Titik Asal',
+                'translasi': 'Mencari Vektor Translasi'
+            };
             
             app.innerHTML = `
                 <div class="w-full h-full grid-bg p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
                     <div class="max-w-4xl mx-auto">
                         <div class="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
-                            <h1 class="font-bold text-center sm:text-left" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.4}px;">
-                                ${config.app_title || defaultConfig.app_title}
-                            </h1>
+                            <div class="flex items-center gap-2 md:gap-3">
+                                <button onclick="backToMenu()" class="px-3 py-2 rounded-lg transition-all" style="background-color: ${config.card_color}; color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                    ← Menu
+                                </button>
+                                <h1 class="font-bold text-center sm:text-left" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
+                                    ${modeName[learningMode]}
+                                </h1>
+                            </div>
                             <button onclick="startNewProblem()" class="w-full sm:w-auto px-4 md:px-6 py-2 rounded-lg font-semibold transition-all whitespace-nowrap" style="background-color: ${config.secondary_action_color}; color: white; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
                                 ${config.new_problem_button || defaultConfig.new_problem_button}
                             </button>
@@ -469,13 +720,13 @@
                         <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl" style="background-color: ${config.card_color};">
                             <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">Soal:</h2>
                             <p class="mb-3 md:mb-4" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px; line-height: 1.5;">
-                                Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan oleh T(${currentProblem.translation_x}, ${currentProblem.translation_y}). Tentukan bayangan titik A!
+                                ${soalText}
                             </p>
                             ${drawCoordinateSystem(currentProblem)}
                         </div>
                         
                         <div class="mb-4 md:mb-6 flex gap-1.5 md:gap-2">
-                            ${steps.map((s, idx) => `
+                            ${activeSteps.map((s, idx) => `
                                 <div class="flex-1 h-1.5 md:h-2 rounded-full transition-all" style="background-color: ${idx <= currentStep ? config.primary_action_color : config.card_color};"></div>
                             `).join('')}
                         </div>
@@ -683,5 +934,5 @@
 
         init();
     </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b9fe1a450996023',t:'MTc2Nzc1MTQzNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b9ff481509d9cbf',t:'MTc2Nzc1MjIwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
