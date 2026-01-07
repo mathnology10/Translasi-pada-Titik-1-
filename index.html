@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="id" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Translasi Titik</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        
+        * {
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        .grid-bg {
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .step-card {
+            transition: all 0.3s ease;
+        }
+        
+        .step-card.active {
+            transform: scale(1.02);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.3);
+        }
+        
+        .choice-btn {
+            transition: all 0.2s ease;
+        }
+        
+        .choice-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .choice-btn.correct {
+            animation: correct-pulse 0.5s ease;
+        }
+        
+        .choice-btn.incorrect {
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes correct-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="w-full h-full overflow-auto"></div>
+  <script>
+        const defaultConfig = {
+            background_color: "#0f172a",
+            card_color: "#1e293b",
+            text_color: "#f1f5f9",
+            primary_action_color: "#6366f1",
+            secondary_action_color: "#10b981",
+            font_family: "Poppins",
+            font_size: 16,
+            app_title: "Translasi Titik",
+            subtitle: "Belajar Transformasi Geometri",
+            new_problem_button: "Soal Baru",
+            check_answer_button: "Periksa Jawaban"
+        };
+        
+        let config = { ...defaultConfig };
+        let currentProblem = null;
+        let currentStep = 0;
+        let selectedAnswer = null;
+        let problemHistory = [];
+        let isLoading = false;
+        let showHint = false;
+
+        const steps = [
+            {
+                title: "Langkah 1: Identifikasi Titik Awal",
+                question: "Apa koordinat titik awal?",
+                formula: "A(x, y)",
+                hint: "Titik awal adalah titik sebelum dilakukan translasi",
+                getChoices: (problem) => {
+                    return [
+                        { text: `A(${problem.point_x}, ${problem.point_y})`, correct: true },
+                        { text: `A(${problem.point_y}, ${problem.point_x})`, correct: false },
+                        { text: `A(${-problem.point_x}, ${problem.point_y})`, correct: false },
+                        { text: `A(${problem.point_x}, ${-problem.point_y})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Titik awal adalah A(${problem.point_x}, ${problem.point_y}), dimana x = ${problem.point_x} dan y = ${problem.point_y}`
+            },
+            {
+                title: "Langkah 2: Identifikasi Vektor Translasi",
+                question: "Berapa nilai a dan b dari vektor translasi T(a, b)?",
+                formula: "T(a, b)",
+                hint: "Nilai a adalah pergeseran horizontal, nilai b adalah pergeseran vertikal",
+                getChoices: (problem) => {
+                    return [
+                        { text: `a = ${problem.translation_x}, b = ${problem.translation_y}`, correct: true },
+                        { text: `a = ${problem.translation_y}, b = ${problem.translation_x}`, correct: false },
+                        { text: `a = ${-problem.translation_x}, b = ${problem.translation_y}`, correct: false },
+                        { text: `a = ${problem.translation_x}, b = ${-problem.translation_y}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => `Dari T(${problem.translation_x}, ${problem.translation_y}), kita dapatkan: a = ${problem.translation_x} dan b = ${problem.translation_y}`
+            },
+            {
+                title: "Langkah 3: Hitung Koordinat X Baru",
+                question: "Berapa koordinat x' setelah translasi?",
+                formula: "x' = x + a",
+                hint: (problem) => `Gunakan rumus x' = x + a, dimana x = ${problem.point_x} dan a = ${problem.translation_x}`,
+                getChoices: (problem) => {
+                    const correct = problem.point_x + problem.translation_x;
+                    return [
+                        { text: `x' = ${correct}`, correct: true },
+                        { text: `x' = ${problem.point_x - problem.translation_x}`, correct: false },
+                        { text: `x' = ${problem.point_x + problem.translation_y}`, correct: false },
+                        { text: `x' = ${problem.point_x}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const result = problem.point_x + problem.translation_x;
+                    return `Menggunakan rumus x' = x + a → x' = ${problem.point_x} + (${problem.translation_x}) = ${result}`;
+                }
+            },
+            {
+                title: "Langkah 4: Hitung Koordinat Y Baru",
+                question: "Berapa koordinat y' setelah translasi?",
+                formula: "y' = y + b",
+                hint: (problem) => `Gunakan rumus y' = y + b, dimana y = ${problem.point_y} dan b = ${problem.translation_y}`,
+                getChoices: (problem) => {
+                    const correct = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `y' = ${correct}`, correct: true },
+                        { text: `y' = ${problem.point_y - problem.translation_y}`, correct: false },
+                        { text: `y' = ${problem.point_y + problem.translation_x}`, correct: false },
+                        { text: `y' = ${problem.point_y}`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const result = problem.point_y + problem.translation_y;
+                    return `Menggunakan rumus y' = y + b → y' = ${problem.point_y} + (${problem.translation_y}) = ${result}`;
+                }
+            },
+            {
+                title: "Langkah 5: Tentukan Bayangan",
+                question: "Apa koordinat bayangan titik A?",
+                formula: "A'(x', y') = A(x + a, y + b)",
+                hint: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Gabungkan hasil x' dan y' yang sudah dihitung: A'(x', y')`;
+                },
+                getChoices: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return [
+                        { text: `A'(${x_new}, ${y_new})`, correct: true },
+                        { text: `A'(${y_new}, ${x_new})`, correct: false },
+                        { text: `A'(${problem.point_x}, ${problem.point_y})`, correct: false },
+                        { text: `A'(${x_new - problem.translation_x * 2}, ${y_new})`, correct: false }
+                    ];
+                },
+                explanation: (problem) => {
+                    const x_new = problem.point_x + problem.translation_x;
+                    const y_new = problem.point_y + problem.translation_y;
+                    return `Bayangan titik A adalah A'(${x_new}, ${y_new}) dari hasil x' = ${x_new} dan y' = ${y_new}`;
+                }
+            }
+        ];
+
+        function generateProblem() {
+            const point_x = Math.floor(Math.random() * 11) - 5;
+            const point_y = Math.floor(Math.random() * 11) - 5;
+            const translation_x = Math.floor(Math.random() * 9) - 4;
+            const translation_y = Math.floor(Math.random() * 9) - 4;
+            
+            return {
+                problem_id: `problem_${Date.now()}`,
+                point_x,
+                point_y,
+                translation_x,
+                translation_y,
+                current_step: 0,
+                completed: false,
+                timestamp: new Date().toISOString()
+            };
+        }
+
+        function startNewProblem() {
+            currentProblem = generateProblem();
+            currentStep = 0;
+            selectedAnswer = null;
+            completedSteps = [];
+            showHint = false;
+            currentChoices = null;
+            render();
+        }
+
+        let completedSteps = [];
+        let currentChoices = null;
+
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        async function checkAnswer(choiceIndex) {
+            if (selectedAnswer !== null || isLoading) return;
+            
+            selectedAnswer = choiceIndex;
+            const isCorrect = currentChoices[choiceIndex].correct;
+            
+            render();
+            
+            if (isCorrect) {
+                completedSteps.push({
+                    step: currentStep,
+                    explanation: steps[currentStep].explanation(currentProblem),
+                    title: steps[currentStep].title
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (currentStep < steps.length - 1) {
+                    currentStep++;
+                    selectedAnswer = null;
+                    showHint = false;
+                    currentChoices = null;
+                } else {
+                    currentProblem.current_step = currentStep;
+                    currentProblem.completed = true;
+                    
+                    isLoading = true;
+                    render();
+                    
+                    const result = await window.dataSdk.create({
+                        problem_id: currentProblem.problem_id,
+                        point_x: currentProblem.point_x,
+                        point_y: currentProblem.point_y,
+                        translation_x: currentProblem.translation_x,
+                        translation_y: currentProblem.translation_y,
+                        current_step: currentStep,
+                        completed: true,
+                        timestamp: currentProblem.timestamp
+                    });
+                    
+                    isLoading = false;
+                    
+                    if (!result.isOk) {
+                        showMessage("Terjadi kesalahan saat menyimpan data", "error");
+                    }
+                }
+                render();
+            }
+        }
+
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `fixed top-4 right-4 px-6 py-3 rounded-lg text-white font-semibold shadow-lg z-50 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            messageDiv.textContent = message;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        function toggleHint() {
+            showHint = !showHint;
+            render();
+        }
+
+        function drawCoordinateSystem(problem) {
+            const gridSize = 12;
+            const cellSize = 30;
+            const originX = gridSize / 2;
+            const originY = gridSize / 2;
+            
+            let svg = `<svg viewBox="0 0 ${gridSize * cellSize} ${gridSize * cellSize}" class="w-full max-w-md mx-auto" style="background-color: ${config.background_color}; border-radius: 12px; padding: 16px;">`;
+            
+            for (let i = 0; i <= gridSize; i++) {
+                const pos = i * cellSize;
+                svg += `<line x1="${pos}" y1="0" x2="${pos}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.2"/>`;
+                svg += `<line x1="0" y1="${pos}" x2="${gridSize * cellSize}" y2="${pos}" stroke="${config.text_color}" stroke-width="0.5" opacity="0.2"/>`;
+            }
+            
+            svg += `<line x1="${originX * cellSize}" y1="0" x2="${originX * cellSize}" y2="${gridSize * cellSize}" stroke="${config.text_color}" stroke-width="2"/>`;
+            svg += `<line x1="0" y1="${originY * cellSize}" x2="${gridSize * cellSize}" y2="${originY * cellSize}" stroke="${config.text_color}" stroke-width="2"/>`;
+            
+            const px = (originX + problem.point_x) * cellSize;
+            const py = (originY - problem.point_y) * cellSize;
+            svg += `<circle cx="${px}" cy="${py}" r="6" fill="${config.primary_action_color}"/>`;
+            svg += `<text x="${px + 12}" y="${py - 8}" fill="${config.text_color}" font-size="14" font-weight="600">A</text>`;
+            
+            if (currentStep >= 2) {
+                const nx = (originX + problem.point_x + problem.translation_x) * cellSize;
+                const ny = (originY - problem.point_y - problem.translation_y) * cellSize;
+                
+                svg += `<line x1="${px}" y1="${py}" x2="${nx}" y2="${ny}" stroke="${config.secondary_action_color}" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>`;
+                
+                svg += `<circle cx="${nx}" cy="${ny}" r="6" fill="${config.secondary_action_color}"/>`;
+                svg += `<text x="${nx + 12}" y="${ny - 8}" fill="${config.text_color}" font-size="14" font-weight="600">A'</text>`;
+            }
+            
+            svg += `<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${config.secondary_action_color}"/></marker></defs>`;
+            svg += `</svg>`;
+            
+            return svg;
+        }
+
+        async function onConfigChange(newConfig) {
+            config = { ...newConfig };
+            render();
+        }
+
+        function render() {
+            const baseSize = config.font_size || defaultConfig.font_size;
+            const customFont = config.font_family || defaultConfig.font_family;
+            const fontStack = `${customFont}, Poppins, sans-serif`;
+            
+            const app = document.getElementById('app');
+            
+            if (!currentProblem) {
+                app.innerHTML = `
+                    <div class="w-full h-full grid-bg overflow-auto p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
+                        <div class="max-w-3xl mx-auto py-4 md:py-8">
+                            <div class="text-center mb-6 md:mb-8 fade-in px-2">
+                                <h1 class="mb-2 md:mb-3 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.8}px;">
+                                    ${config.app_title || defaultConfig.app_title}
+                                </h1>
+                                <p class="mb-4 md:mb-8" style="color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack}; font-size: ${baseSize}px;">
+                                    ${config.subtitle || defaultConfig.subtitle}
+                                </p>
+                            </div>
+                            
+                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
+                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
+                                    📐 Apa itu Translasi?
+                                </h2>
+                                <p class="mb-3 md:mb-4" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px; line-height: 1.6;">
+                                    <strong>Translasi</strong> adalah perpindahan suatu titik atau bangun geometri dari satu posisi ke posisi lain dengan arah dan jarak tertentu. Dalam translasi, bentuk dan ukuran objek tidak berubah, hanya posisinya saja yang berpindah.
+                                </p>
+                            </div>
+                            
+                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
+                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
+                                    📝 Rumus Translasi Titik
+                                </h2>
+                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl mb-3 md:mb-4" style="background-color: ${config.background_color};">
+                                    <p class="mb-2 font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
+                                        Jika titik A(x, y) ditranslasikan oleh T(a, b), maka:
+                                    </p>
+                                    <p class="font-bold text-center py-2 md:py-3" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                        A'(x', y') = A(x + a, y + b)
+                                    </p>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                                    <div class="p-3 rounded-lg" style="background-color: ${config.background_color};">
+                                        <p class="font-semibold mb-1" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
+                                            Koordinat x baru:
+                                        </p>
+                                        <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                            x' = x + a
+                                        </p>
+                                    </div>
+                                    <div class="p-3 rounded-lg" style="background-color: ${config.background_color};">
+                                        <p class="font-semibold mb-1" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
+                                            Koordinat y baru:
+                                        </p>
+                                        <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                            y' = y + b
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
+                                <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.2}px;">
+                                    💡 Contoh
+                                </h2>
+                                <p class="mb-3" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
+                                    Titik A(2, 3) ditranslasikan oleh T(4, -1)
+                                </p>
+                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color};">
+                                    <p class="mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
+                                        x' = 2 + 4 = <span class="font-bold" style="color: ${config.secondary_action_color};">6</span>
+                                    </p>
+                                    <p class="mb-2" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
+                                        y' = 3 + (-1) = <span class="font-bold" style="color: ${config.secondary_action_color};">2</span>
+                                    </p>
+                                    <p class="font-bold mt-2 md:mt-3" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                        Hasil: A'(6, 2)
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center px-4">
+                                <button onclick="startNewProblem()" class="w-full sm:w-auto px-6 md:px-8 py-3 md:py-4 rounded-lg md:rounded-xl font-semibold transform hover:scale-105 transition-all shadow-lg" style="background-color: ${config.primary_action_color}; color: white; font-family: ${fontStack}; font-size: ${baseSize}px;">
+                                    ${config.new_problem_button || defaultConfig.new_problem_button}
+                                </button>
+                                <div class="mt-6 md:mt-8">
+                                    <p class="font-semibold" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                        📊 Riwayat Soal Terselesaikan: ${problemHistory.length}
+                                    </p>
+                                </div>
+                                <div class="mt-8 md:mt-12 pt-6 md:pt-8 border-t" style="border-color: ${config.text_color}; border-opacity: 0.2;">
+                                    <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                        MATHNOLOGY
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const step = steps[currentStep];
+            
+            // Generate dan shuffle choices hanya sekali per step
+            if (!currentChoices) {
+                const originalChoices = step.getChoices(currentProblem);
+                currentChoices = shuffleArray(originalChoices);
+            }
+            
+            const isCompleted = currentStep === steps.length - 1 && selectedAnswer !== null && currentChoices[selectedAnswer].correct;
+            
+            app.innerHTML = `
+                <div class="w-full h-full grid-bg p-3 sm:p-4 md:p-6" style="background-color: ${config.background_color};">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
+                            <h1 class="font-bold text-center sm:text-left" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.4}px;">
+                                ${config.app_title || defaultConfig.app_title}
+                            </h1>
+                            <button onclick="startNewProblem()" class="w-full sm:w-auto px-4 md:px-6 py-2 rounded-lg font-semibold transition-all whitespace-nowrap" style="background-color: ${config.secondary_action_color}; color: white; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                ${config.new_problem_button || defaultConfig.new_problem_button}
+                            </button>
+                        </div>
+                        
+                        <div class="rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 shadow-xl" style="background-color: ${config.card_color};">
+                            <h2 class="mb-3 md:mb-4 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">Soal:</h2>
+                            <p class="mb-3 md:mb-4" style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px; line-height: 1.5;">
+                                Titik A(${currentProblem.point_x}, ${currentProblem.point_y}) ditranslasikan oleh T(${currentProblem.translation_x}, ${currentProblem.translation_y}). Tentukan bayangan titik A!
+                            </p>
+                            ${drawCoordinateSystem(currentProblem)}
+                        </div>
+                        
+                        <div class="mb-4 md:mb-6 flex gap-1.5 md:gap-2">
+                            ${steps.map((s, idx) => `
+                                <div class="flex-1 h-1.5 md:h-2 rounded-full transition-all" style="background-color: ${idx <= currentStep ? config.primary_action_color : config.card_color};"></div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl step-card ${currentStep >= 0 ? 'active' : ''} fade-in" style="background-color: ${config.card_color};">
+                            <h3 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                ${step.title}
+                            </h3>
+                            
+                            ${step.formula ? `
+                                <div class="mb-3 md:mb-4 p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color};">
+                                    <p class="mb-1" style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.8}px;">
+                                        📐 Rumus:
+                                    </p>
+                                    <p class="font-bold" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                        ${step.formula}
+                                    </p>
+                                </div>
+                            ` : ''}
+                            
+                            ${step.hint ? `
+                                <div class="mb-3 md:mb-4">
+                                    <button onclick="toggleHint()" class="w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition-all mb-2 md:mb-3" style="background-color: ${config.background_color}; color: ${config.text_color}; border: 2px solid ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">
+                                        ${showHint ? '🔼 Sembunyikan Petunjuk' : '💡 Lihat Petunjuk'}
+                                    </button>
+                                    ${showHint ? `
+                                        <div class="p-3 rounded-lg" style="background-color: ${config.background_color}; border-left: 4px solid ${config.primary_action_color};">
+                                            <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px; line-height: 1.5;">
+                                                💡 ${typeof step.hint === 'function' ? step.hint(currentProblem) : step.hint}
+                                            </p>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                            
+                            <p class="mb-4 md:mb-6 font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.95}px;">
+                                ${step.question}
+                            </p>
+                            
+                            <div class="grid gap-2 md:gap-3 mb-4 md:mb-6">
+                                ${currentChoices.map((choice, idx) => {
+                                    let bgColor = config.card_color;
+                                    let borderColor = config.text_color;
+                                    let opacity = '0.3';
+                                    let classes = 'choice-btn';
+                                    
+                                    if (selectedAnswer === idx) {
+                                        if (choice.correct) {
+                                            bgColor = config.secondary_action_color;
+                                            borderColor = config.secondary_action_color;
+                                            opacity = '1';
+                                            classes += ' correct';
+                                        } else {
+                                            bgColor = '#ef4444';
+                                            borderColor = '#ef4444';
+                                            opacity = '1';
+                                            classes += ' incorrect';
+                                        }
+                                    }
+                                    
+                                    const disabled = selectedAnswer !== null ? 'pointer-events-none' : '';
+                                    
+                                    return `
+                                        <button onclick="checkAnswer(${idx})" class="${classes} ${disabled} p-3 md:p-4 rounded-lg md:rounded-xl font-semibold text-left transition-all" style="background-color: ${bgColor}; border: 2px solid ${borderColor}; border-opacity: ${opacity}; color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.4;">
+                                            ${String.fromCharCode(65 + idx)}. ${choice.text}
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+                            
+                            ${selectedAnswer !== null && currentChoices[selectedAnswer].correct ? `
+                                <div class="p-3 md:p-4 rounded-lg md:rounded-xl fade-in" style="background-color: ${config.secondary_action_color}; background-opacity: 0.2; border: 2px solid ${config.secondary_action_color};">
+                                    <p class="font-semibold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
+                                        ✓ Benar! ${step.explanation(currentProblem)}
+                                    </p>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${completedSteps.length > 0 ? `
+                            <div class="mt-4 md:mt-6 rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl fade-in" style="background-color: ${config.card_color};">
+                                <h3 class="mb-3 md:mb-4 font-bold" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.1}px;">
+                                    📋 Pembahasan Lengkap
+                                </h3>
+                                <div class="space-y-3 md:space-y-4">
+                                    ${completedSteps.map((completed, idx) => `
+                                        <div class="p-3 md:p-4 rounded-lg md:rounded-xl" style="background-color: ${config.background_color}; border-left: 3px md:border-left-4 solid ${config.secondary_action_color};">
+                                            <h4 class="font-semibold mb-1 md:mb-2" style="color: ${config.secondary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px;">
+                                                ${completed.title}
+                                            </h4>
+                                            <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px; line-height: 1.5;">
+                                                ${completed.explanation}
+                                            </p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${isCompleted ? `
+                            <div class="mt-4 md:mt-6 p-4 md:p-6 rounded-lg md:rounded-xl text-center fade-in" style="background-color: ${config.primary_action_color}; background-opacity: 0.2; border: 2px solid ${config.primary_action_color};">
+                                <h3 class="mb-2 font-bold" style="color: ${config.text_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.3}px;">🎉 Selamat!</h3>
+                                <p style="color: ${config.text_color}; opacity: 0.9; font-family: ${fontStack}; font-size: ${baseSize * 0.9}px; line-height: 1.5;">
+                                    Anda telah menyelesaikan soal translasi ini dengan sempurna!
+                                </p>
+                            </div>
+                        ` : ''}
+                        </div>
+                        
+                        ${isLoading ? `
+                            <div class="text-center mt-4">
+                                <p style="color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack}; font-size: ${baseSize * 0.85}px;">Menyimpan progress...</p>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="text-center mt-8 md:mt-12 pt-6 md:pt-8 border-t" style="border-color: ${config.text_color}; border-opacity: 0.2;">
+                            <p class="font-bold tracking-wider" style="color: ${config.primary_action_color}; font-family: ${fontStack}; font-size: ${baseSize * 1.05}px;">
+                                MATHNOLOGY
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const dataHandler = {
+            onDataChanged(data) {
+                problemHistory = data;
+            }
+        };
+
+        async function init() {
+            const initResult = await window.dataSdk.init(dataHandler);
+            if (!initResult.isOk) {
+                console.error("Failed to initialize data SDK");
+            }
+            
+            window.elementSdk.init({
+                defaultConfig,
+                onConfigChange,
+                mapToCapabilities: (cfg) => ({
+                    recolorables: [
+                        {
+                            get: () => cfg.background_color || defaultConfig.background_color,
+                            set: (value) => {
+                                cfg.background_color = value;
+                                window.elementSdk.setConfig({ background_color: value });
+                            }
+                        },
+                        {
+                            get: () => cfg.card_color || defaultConfig.card_color,
+                            set: (value) => {
+                                cfg.card_color = value;
+                                window.elementSdk.setConfig({ card_color: value });
+                            }
+                        },
+                        {
+                            get: () => cfg.text_color || defaultConfig.text_color,
+                            set: (value) => {
+                                cfg.text_color = value;
+                                window.elementSdk.setConfig({ text_color: value });
+                            }
+                        },
+                        {
+                            get: () => cfg.primary_action_color || defaultConfig.primary_action_color,
+                            set: (value) => {
+                                cfg.primary_action_color = value;
+                                window.elementSdk.setConfig({ primary_action_color: value });
+                            }
+                        },
+                        {
+                            get: () => cfg.secondary_action_color || defaultConfig.secondary_action_color,
+                            set: (value) => {
+                                cfg.secondary_action_color = value;
+                                window.elementSdk.setConfig({ secondary_action_color: value });
+                            }
+                        }
+                    ],
+                    borderables: [],
+                    fontEditable: {
+                        get: () => cfg.font_family || defaultConfig.font_family,
+                        set: (value) => {
+                            cfg.font_family = value;
+                            window.elementSdk.setConfig({ font_family: value });
+                        }
+                    },
+                    fontSizeable: {
+                        get: () => cfg.font_size || defaultConfig.font_size,
+                        set: (value) => {
+                            cfg.font_size = value;
+                            window.elementSdk.setConfig({ font_size: value });
+                        }
+                    }
+                }),
+                mapToEditPanelValues: (cfg) => new Map([
+                    ["app_title", cfg.app_title || defaultConfig.app_title],
+                    ["subtitle", cfg.subtitle || defaultConfig.subtitle],
+                    ["new_problem_button", cfg.new_problem_button || defaultConfig.new_problem_button],
+                    ["check_answer_button", cfg.check_answer_button || defaultConfig.check_answer_button]
+                ])
+            });
+            
+            render();
+        }
+
+        init();
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b9fe1a450996023',t:'MTc2Nzc1MTQzNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
